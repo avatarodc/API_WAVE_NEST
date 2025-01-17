@@ -1,5 +1,4 @@
-// src/contacts/entities/contact.entity.ts
-import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
 @Entity('contacts')
@@ -7,19 +6,16 @@ export class Contact {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => User, user => user.contacts)
-  utilisateur: User;
-
-  @Column()
+  @Column({ type: 'varchar' })
   nom: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   telephone: string;
 
-  @CreateDateColumn()
+  @Column({ type: 'timestamp', name: 'createdAt', default: () => 'CURRENT_TIMESTAMP' })
   createdAt: Date;
 
-  @UpdateDateColumn()
-  updatedAt: Date;
+  @ManyToOne(() => User, user => user.contacts)
+  @JoinColumn({ name: 'utilisateurId' }) // Correspond à la colonne dans la base
+  utilisateur: User;
 }
-

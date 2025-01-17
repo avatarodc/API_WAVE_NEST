@@ -1,63 +1,43 @@
-// src/users/entities/user.entity.ts
-import { Entity, Column, PrimaryGeneratedColumn, OneToMany, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Transaction } from '../../transactions/entities/transaction.entity';
 import { Contact } from '../../contacts/entities/contact.entity';
-import { Exclude } from 'class-transformer';
 
 @Entity('utilisateurs')
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   nom: string;
 
-  @Column()
+  @Column({ type: 'varchar' })
   prenom: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   email: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar' })
   telephone: string;
 
-  @Column({ nullable: true })
-  adresse: string;
-
-  @Column({ type: 'date', nullable: true })
-  dateNaissance: Date;
-
-  @Column({ default: 'Actif' })
-  statut: 'Actif' | 'Inactif';
-
-  @Column({ default: 'Client' })
-  role: 'Client' | 'Agent';
-
-  @Column()
-  @Exclude()
+  @Column({ type: 'varchar' })
   pin: string;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 0 })
+  @Column({ type: 'numeric', precision: 15, scale: 2, default: 0 })
   solde: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2, default: 100000 })
-  plafond: number;
+  @Column({ type: 'varchar', default: 'Actif' })
+  statut: string;
 
-  @Column({ nullable: true })
-  qrCode: string;
+  @Column({ type: 'varchar', default: 'Client' })
+  role: string;
 
-  @CreateDateColumn()
-  createdAt: Date;
-
-  @UpdateDateColumn()
-  updatedAt: Date;
-
-  @OneToMany(() => Transaction, (transaction) => transaction.expediteur)
+  @OneToMany(() => Transaction, transaction => transaction.expediteur)
   transactionsEnvoyees: Transaction[];
 
-  @OneToMany(() => Transaction, (transaction) => transaction.destinataire)
+  @OneToMany(() => Transaction, transaction => transaction.destinataire)
   transactionsRecues: Transaction[];
 
-  @OneToMany(() => Contact, (contact) => contact.utilisateur)
+  @OneToMany(() => Contact, contact => contact.utilisateur)
   contacts: Contact[];
 }
+

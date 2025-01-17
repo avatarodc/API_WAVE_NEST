@@ -1,76 +1,145 @@
-// src/transactions/transactions.service.ts
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Transaction } from './entities/transaction.entity';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
+import { Transaction, TransactionType } from './entities/transaction.entity';
 import { UsersService } from '../users/users.service';
-import { User } from '../users/entities/user.entity';
+import { TransfertDto } from './dto/transfert.dto';
+import { AchatCreditDto } from './dto/achat-credit.dto';
 
 @Injectable()
 export class TransactionsService {
-  private readonly FRAIS_POURCENTAGE = 0.01;
-
   constructor(
     @InjectRepository(Transaction)
     private transactionsRepository: Repository<Transaction>,
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
     private usersService: UsersService,
   ) {}
 
-  async create(expediteurTelephone: string, createTransactionDto: CreateTransactionDto): Promise<Transaction> {
-    const expediteur = await this.usersService.findByTelephone(expediteurTelephone);
-    const destinataire = await this.usersService.findByTelephone(createTransactionDto.destinataireTelephone);
+  private calculateFrais(montant: number): number {
+    return montant * 0.01; // 1% des frais
+  }
 
-    const pinValid = await this.usersService.verifyPin(expediteur, createTransactionDto.pin);
-    if (!pinValid) {
-      throw new BadRequestException('PIN incorrect');
+  async transfert(transfertDto: TransfertDto, userId: string) {
+    const expediteur = await this.usersService.findById(userId);
+    if (!expediteur) {
+      throw new NotFoundException('Expéditeur non trouvé');
     }
 
-    const frais = createTransactionDto.montant * this.FRAIS_POURCENTAGE;
-    const montantTotal = createTransactionDto.montant + frais;
+    const destinataire = await this.usersService.findByTelephone(transfertDto.destinataireTelephone);
+    if (!destinataire) {
+      throw new BadRequestException('Destinataire non trouvé');
+    }
+
+    const frais = this.calculateFrais(transfertDto.montant);
+    const montantTotal = transfertDto.montant + frais;
 
     if (expediteur.solde < montantTotal) {
       throw new BadRequestException('Solde insuffisant pour couvrir le montant et les frais');
     }
 
-    return await this.transactionsRepository.manager.transaction(async (transactionalEntityManager) => {
-      expediteur.solde = Number(expediteur.solde) - montantTotal;
-      await transactionalEntityManager.save(User, expediteur);
+    expediteur.solde -= montantTotal;
+    destinataire.solde += transfertDto.montant;
 
-      destinataire.solde = Number(destinataire.solde) + Number(createTransactionDto.montant);
-      await transactionalEntityManager.save(User, destinataire);
+    await Promise.all([
+      this.usersService.updateUser(expediteur),
+      this.usersService.updateUser(destinataire),
+    ]);
 
-      const transaction = this.transactionsRepository.create({
-        expediteur,
-        destinataire,
-        montant: createTransactionDto.montant,
+    const transaction = this.transactionsRepository.create({
+      expediteur,
+      destinataire,
+      montant: transfertDto.montant,
+      montant_frais: frais,
+      type: TransactionType.TRANSFERT,
+    });
+
+    await this.transactionsRepository.save(transaction);
+
+    return {
+      code: 'ok',
+      data: {
+        ...transaction,
         frais,
-        description: createTransactionDto.description
-      });
-
-      return await transactionalEntityManager.save(Transaction, transaction);
-    });
+        montantTotal,
+      },
+      message: 'Transfert effectué avec succès',
+    };
   }
 
-  async findAll(): Promise<Transaction[]> {
-    return await this.transactionsRepository.find({
-      relations: ['expediteur', 'destinataire'],
-      order: { date: 'DESC' },
+  async achatCredit(achatCreditDto: AchatCreditDto, userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
+
+    const frais = this.calculateFrais(achatCreditDto.montant);
+    const montantTotal = achatCreditDto.montant + frais;
+
+    if (user.solde < montantTotal) {
+      throw new BadRequestException('Solde insuffisant pour couvrir le montant et les frais');
+    }
+
+    user.solde -= montantTotal;
+    await this.usersService.updateUser(user);
+
+    const transaction = this.transactionsRepository.create({
+      destinataire: user,
+      montant: achatCreditDto.montant,
+      montant_frais: frais,
+      type: TransactionType.CREDIT,
     });
+
+    await this.transactionsRepository.save(transaction);
+
+    return {
+      code: 'ok',
+      data: {
+        ...transaction,
+        frais,
+        montantTotal,
+      },
+      message: 'Achat de crédit effectué avec succès',
+    };
   }
 
-  async findByUser(telephone: string): Promise<Transaction[]> {
-    const user = await this.usersService.findByTelephone(telephone);
-    
-    return await this.transactionsRepository.find({
+  async getUserTransactions(userId: string) {
+    const transactions = await this.transactionsRepository.find({
       where: [
-        { expediteur: { id: user.id } },
-        { destinataire: { id: user.id } }
+        { expediteur: { id: userId } },
+        { destinataire: { id: userId } },
       ],
-      relations: ['expediteur', 'destinataire'],
-      order: { date: 'DESC' },
+      order: { date_transaction: 'DESC' },
     });
+
+    return {
+      code: 'ok',
+      data: transactions,
+      message: 'Transactions récupérées avec succès',
+    };
+  }
+
+  async deleteTransaction(id: string, userId: string) {
+    const transaction = await this.transactionsRepository.findOne({
+      where: { id },
+      relations: ['expediteur', 'destinataire'],
+    });
+
+    if (!transaction) {
+      throw new NotFoundException('Transaction introuvable');
+    }
+
+    if (
+      transaction.expediteur?.id !== userId &&
+      transaction.destinataire?.id !== userId
+    ) {
+      throw new BadRequestException("Vous n'êtes pas autorisé à supprimer cette transaction");
+    }
+
+    await this.transactionsRepository.remove(transaction);
+
+    return {
+      code: 'ok',
+      message: 'Transaction supprimée avec succès',
+    };
   }
 }
+

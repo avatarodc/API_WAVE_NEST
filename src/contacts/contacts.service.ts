@@ -1,11 +1,8 @@
-// src/contacts/contacts.service.ts
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Contact } from './entities/contact.entity';
-import { User } from '../users/entities/user.entity';
 import { CreateContactDto } from './dto/create-contact.dto';
-import { FilterContactsDto } from './dto/filter-contacts.dto';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -13,24 +10,24 @@ export class ContactsService {
   constructor(
     @InjectRepository(Contact)
     private contactsRepository: Repository<Contact>,
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
     private usersService: UsersService,
   ) {}
 
-  async create(userTelephone: string, createContactDto: CreateContactDto): Promise<Contact> {
-    const user = await this.usersService.findByTelephone(userTelephone);
+  async create(createContactDto: CreateContactDto, userId: string) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
 
-    // Vérifier si le contact existe déjà pour cet utilisateur
     const existingContact = await this.contactsRepository.findOne({
       where: {
-        utilisateur: { id: user.id },
+        utilisateur: { id: userId },
         telephone: createContactDto.telephone,
       },
     });
 
     if (existingContact) {
-      throw new ConflictException('Ce contact existe déjà');
+      throw new BadRequestException('Ce contact existe déjà dans votre liste');
     }
 
     const contact = this.contactsRepository.create({
@@ -41,32 +38,18 @@ export class ContactsService {
     return await this.contactsRepository.save(contact);
   }
 
-  async findAllByUser(userTelephone: string, filterDto: FilterContactsDto): Promise<Contact[]> {
-    const user = await this.usersService.findByTelephone(userTelephone);
-    
-    const queryBuilder = this.contactsRepository.createQueryBuilder('contact')
-      .where('contact.utilisateur_id = :userId', { userId: user.id });
-
-    if (filterDto.nom) {
-      queryBuilder.andWhere('contact.nom ILIKE :nom', { nom: `%${filterDto.nom}%` });
-    }
-
-    if (filterDto.telephone) {
-      queryBuilder.andWhere('contact.telephone LIKE :telephone', { telephone: `%${filterDto.telephone}%` });
-    }
-
-    return await queryBuilder
-      .orderBy('contact.nom', 'ASC')
-      .getMany();
+  async findAll(userId: string) {
+    return await this.contactsRepository.find({
+      where: { utilisateur: { id: userId } },
+      order: { createdAt: 'DESC' },
+    });
   }
 
-  async findOne(userTelephone: string, contactTelephone: string): Promise<Contact> {
-    const user = await this.usersService.findByTelephone(userTelephone);
-    
+  async findByTelephone(userId: string, telephone: string) {
     const contact = await this.contactsRepository.findOne({
       where: {
-        utilisateur: { id: user.id },
-        telephone: contactTelephone,
+        utilisateur: { id: userId },
+        telephone: telephone,
       },
     });
 
@@ -77,33 +60,9 @@ export class ContactsService {
     return contact;
   }
 
-  async verifyContactInUsers(userTelephone: string, contactTelephone: string): Promise<{
-    exists: boolean;
-    isUser: boolean;
-    contact?: Contact;
-    userData?: Partial<User>;
-  }> {
-    const user = await this.usersService.findByTelephone(userTelephone);
-    
-    // Vérifier si c'est un contact
-    const contact = await this.contactsRepository.findOne({
-      where: {
-        utilisateur: { id: user.id },
-        telephone: contactTelephone,
-      },
-    });
-
-    // Vérifier si c'est un utilisateur de l'application
-    const contactUser = await this.usersRepository.findOne({
-      where: { telephone: contactTelephone },
-      select: ['id', 'nom', 'prenom', 'telephone', 'email'] // Sélectionner uniquement les champs publics
-    });
-
-    return {
-      exists: !!contact,
-      isUser: !!contactUser,
-      contact: contact || undefined,
-      userData: contactUser || undefined,
-    };
+  async remove(userId: string, telephone: string) {
+    const contact = await this.findByTelephone(userId, telephone);
+    await this.contactsRepository.remove(contact);
+    return contact;
   }
 }

@@ -1,6 +1,6 @@
 import { IsNotEmpty, IsString, IsNumber, Min, MinLength } from 'class-validator';
 
-export class CreateTransactionDto {
+export class AchatCreditDto {
   @IsNotEmpty()
   @IsString()
   @MinLength(9)

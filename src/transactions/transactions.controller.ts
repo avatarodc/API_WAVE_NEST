@@ -1,31 +1,31 @@
-import { Controller, Post, Body, Param, Get, UseGuards } from '@nestjs/common'; 
+import { Controller, Post, Body, UseGuards, Request, Get, Delete, Param } from '@nestjs/common';
 import { TransactionsService } from './transactions.service';
-import { CreateTransactionDto } from './dto/create-transaction.dto';
-import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { TransfertDto } from './dto/transfert.dto';
+import { AchatCreditDto } from './dto/achat-credit.dto';
 
 @Controller('api/transactions')
+@UseGuards(JwtAuthGuard)
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
-  @Post(':expediteurTelephone')
-  @UseGuards(JwtAuthGuard)
-  async create(  // Ajout de async
-    @Param('expediteurTelephone') expediteurTelephone: string,
-    @Body() createTransactionDto: CreateTransactionDto,
-  ) {
-    return await this.transactionsService.create(expediteurTelephone, createTransactionDto);
+  @Post('transfert')
+  async transfert(@Body() transfertDto: TransfertDto, @Request() req) {
+    return this.transactionsService.transfert(transfertDto, req.user.id);
   }
-  
+
+  @Post('achat-credit')
+  async achatCredit(@Body() achatCreditDto: AchatCreditDto, @Request() req) {
+    return this.transactionsService.achatCredit(achatCreditDto, req.user.id);
+  }
 
   @Get()
-  @UseGuards(JwtAuthGuard)
-  async findAll() {
-    return await this.transactionsService.findAll();
+  async getUserTransactions(@Request() req) {
+    return this.transactionsService.getUserTransactions(req.user.id);
   }
 
-  @Get('user/:telephone')
-  @UseGuards(JwtAuthGuard)
-  async findByUser(@Param('telephone') telephone: string) {
-    return await this.transactionsService.findByUser(telephone);
+  @Delete(':id')
+  async deleteTransaction(@Param('id') id: string, @Request() req) {
+    return this.transactionsService.deleteTransaction(id, req.user.id);
   }
 }

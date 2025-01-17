@@ -1,19 +1,16 @@
-// src/contacts/contacts.module.ts
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { Contact } from './entities/contact.entity';
 import { ContactsService } from './contacts.service';
 import { ContactsController } from './contacts.controller';
-import { User } from '../users/entities/user.entity';
-import { UsersModule } from '../users/users.module';
+import { Contact } from './entities/contact.entity';
+import { UsersModule } from '../users/users.module'; // Importation correcte de UsersModule
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Contact, User]),
-    UsersModule
+    TypeOrmModule.forFeature([Contact]),
+    UsersModule, // Assurez-vous que UsersModule est bien importé
   ],
-  controllers: [ContactsController],
   providers: [ContactsService],
-  exports: [ContactsService]
+  controllers: [ContactsController],
 })
 export class ContactsModule {}

@@ -1,11 +1,11 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class FilterContactsDto {
-  @IsString()
   @IsOptional()
+  @IsString()
   nom?: string;
 
-  @IsString()
   @IsOptional()
-  telephone?: string;
+  @IsString()
+  numeroTelephone?: string;
 }
